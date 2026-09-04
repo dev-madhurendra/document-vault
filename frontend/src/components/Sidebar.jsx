@@ -11,6 +11,7 @@ export default function Sidebar({
   onDelete,
   isOpen,
   onClose,
+  isLoading = false, // 👈 1. Accept isLoading prop
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -73,67 +74,76 @@ export default function Sidebar({
 
           <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "8px 0" }} />
 
-          {/* Dynamic User Workspaces */}
-          {workspaces.map((ws, index) => (
-            <div
-              key={ws._id || ws.id || `ws-${index}`}
-              className={`sidebar-item ${activeWorkspaceId === ws._id ? "active" : ""}`}
-            >
-              {editingId === ws._id ? (
-                <form className="sidebar-edit-form" onSubmit={(e) => submitEdit(e, ws)}>
-                  <input
-                    autoFocus
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onBlur={() => setEditingId(null)}
-                  />
-                </form>
-              ) : (
-                <>
-                  <button
-                    className="sidebar-item-btn"
-                    onClick={() => {
-                      onSelect(ws._id);
-                      localStorage.setItem("activeWorkspaceId", ws._id);
-                      onClose();
-                    }}
-                  >
-                    <span className="sidebar-item-icon">{ws.icon || "📁"}</span>
-                    <span className="sidebar-item-name">{ws.name}</span>
-                    {ws.itemCount !== undefined && (
-                      <span className="sidebar-item-count">{ws.itemCount}</span>
-                    )}
-                  </button>
-
-                  {!ws.isDefault && (
-                    <div className="sidebar-item-menu">
-                      <button
-                        className="sidebar-item-menu-trigger"
-                        onClick={() => setOpenMenuId(openMenuId === ws._id ? null : ws._id)}
-                        aria-label="Workspace options"
-                      >
-                        ⋯
-                      </button>
-                      {openMenuId === ws._id && (
-                        <div className="sidebar-item-menu-panel">
-                          <button onClick={() => startEdit(ws)}>Rename</button>
-                          <button
-                            className="danger"
-                            onClick={() => {
-                              setOpenMenuId(null);
-                              onDelete(ws._id);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
+          {/* 👈 2. Conditional Skeleton Loader Rendering */}
+          {isLoading ? (
+            <div className="sidebar-skeleton-container">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="sidebar-skeleton-item skeleton-pulse" />
+              ))}
             </div>
-          ))}
+          ) : (
+            /* Dynamic User Workspaces */
+            workspaces.map((ws, index) => (
+              <div
+                key={ws._id || ws.id || `ws-${index}`}
+                className={`sidebar-item ${activeWorkspaceId === ws._id ? "active" : ""}`}
+              >
+                {editingId === ws._id ? (
+                  <form className="sidebar-edit-form" onSubmit={(e) => submitEdit(e, ws)}>
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={() => setEditingId(null)}
+                    />
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      className="sidebar-item-btn"
+                      onClick={() => {
+                        onSelect(ws._id);
+                        localStorage.setItem("activeWorkspaceId", ws._id);
+                        onClose();
+                      }}
+                    >
+                      <span className="sidebar-item-icon">{ws.icon || "📁"}</span>
+                      <span className="sidebar-item-name">{ws.name}</span>
+                      {ws.itemCount !== undefined && (
+                        <span className="sidebar-item-count">{ws.itemCount}</span>
+                      )}
+                    </button>
+
+                    {!ws.isDefault && (
+                      <div className="sidebar-item-menu">
+                        <button
+                          className="sidebar-item-menu-trigger"
+                          onClick={() => setOpenMenuId(openMenuId === ws._id ? null : ws._id)}
+                          aria-label="Workspace options"
+                        >
+                          ⋯
+                        </button>
+                        {openMenuId === ws._id && (
+                          <div className="sidebar-item-menu-panel">
+                            <button onClick={() => startEdit(ws)}>Rename</button>
+                            <button
+                              className="danger"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                onDelete(ws._id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </nav>
 
         <div className="sidebar-footer">
