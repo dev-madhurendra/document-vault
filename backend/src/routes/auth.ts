@@ -191,7 +191,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const token = app.jwt.sign({ id: user._id.toString(), name: user.name, email: user.email });
-      return reply.send({ token, user: { id: user._id, name: user.name, email: user.email } });
+      return reply.send({ token, user: { id: user._id, name: user.name, email: user.email, isVerified: user.isVerified, plan: user.plan } });
     }
   );
 }

@@ -248,6 +248,7 @@ export default function Dashboard() {
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         isLoading={workspacesLoading}
+        userPlan={user?.plan}
         onSelect={(id) => {
           setActiveWorkspaceId(id);
           localStorage.setItem("activeWorkspaceId", id);

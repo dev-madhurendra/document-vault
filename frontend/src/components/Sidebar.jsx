@@ -12,7 +12,7 @@ export default function Sidebar({
   isOpen,
   onClose,
   isLoading = false,
-  userPlan = "basic"
+  userPlan
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -20,7 +20,8 @@ export default function Sidebar({
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
-  const isBasic = userPlan === "basic";
+  const normalizedPlan = (userPlan || "basic").toLowerCase();
+  const isBasic = normalizedPlan === "basic";
 
   const handleCreate = async (e) => {
     e.preventDefault();
