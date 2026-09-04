@@ -1,0 +1,193 @@
+import { FastifyInstance } from "fastify";
+import { DocumentModel, IDocument } from "../models/Document";
+import { authenticate } from "../middleware/auth";
+import {
+  uploadBufferToCloudinary,
+  deleteFromCloudinary,
+  buildDownloadUrl,
+  buildThumbnailUrl,
+} from "../utils/cloudinary";
+
+interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Images and PDFs can be shown inline in the browser; everything else
+// (docx, xlsx, zip, etc.) has to be downloaded to be opened.
+const INLINE_VIEWABLE_FORMATS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "svg", "pdf", "bmp", "tiff",
+]);
+
+function serializeDocument(doc: IDocument) {
+  const format = (doc.format || "").toLowerCase();
+  const viewable = doc.resourceType === "image" && INLINE_VIEWABLE_FORMATS.has(format);
+  return {
+    _id: doc._id,
+    name: doc.name,
+    originalFileName: doc.originalFileName,
+    format: doc.format,
+    bytes: doc.bytes,
+    createdAt: doc.createdAt,
+    thumbnailUrl: buildThumbnailUrl(doc.publicId, doc.resourceType, doc.format),
+    viewable,
+    viewUrl: viewable ? doc.fileUrl : null,
+  };
+}
+
+export async function documentRoutes(app: FastifyInstance) {
+  app.post("/api/documents/upload", { preHandler: authenticate }, async (request, reply) => {
+    const user = request.user as AuthUser;
+    const parts = request.parts();
+
+    let fileBuffer: Buffer | null = null;
+    let originalFileName = "";
+    let documentName = "";
+
+    for await (const part of parts) {
+      if (part.type === "file") {
+        fileBuffer = await part.toBuffer();
+        originalFileName = part.filename;
+      } else if (part.fieldname === "name") {
+        documentName = String(part.value || "").trim();
+      }
+    }
+
+    if (!fileBuffer) {
+      return reply.code(400).send({ error: "No file was uploaded." });
+    }
+    if (!documentName) {
+      documentName = originalFileName;
+    }
+
+    const result = await uploadBufferToCloudinary(fileBuffer, `docvault/${user.id}`);
+
+    const doc = await DocumentModel.create({
+      user: user.id,
+      name: documentName,
+      originalFileName,
+      fileUrl: result.secure_url,
+      publicId: result.public_id,
+      resourceType: result.resource_type,
+      format: result.format,
+      bytes: result.bytes,
+    });
+
+    return reply.code(201).send({ document: serializeDocument(doc) });
+  });
+
+  app.get<{ Querystring: { search?: string } }>(
+    "/api/documents",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const { search } = request.query;
+
+      const query: Record<string, unknown> = { user: user.id };
+      if (search && search.trim()) {
+        query.name = { $regex: search.trim(), $options: "i" };
+      }
+
+      const documents = await DocumentModel.find(query).sort({ createdAt: -1 });
+      return reply.send({ documents: documents.map(serializeDocument) });
+    }
+  );
+
+  // Rename a document (just the searchable label, not the underlying file).
+  app.patch<{ Params: { id: string }; Body: { name?: string } }>(
+    "/api/documents/:id",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const name = (request.body?.name || "").trim();
+      if (!name) {
+        return reply.code(400).send({ error: "Name can't be empty." });
+      }
+
+      const doc = await DocumentModel.findOne({ _id: request.params.id, user: user.id });
+      if (!doc) {
+        return reply.code(404).send({ error: "Document not found." });
+      }
+
+      doc.name = name;
+      await doc.save();
+      return reply.send({ document: serializeDocument(doc) });
+    }
+  );
+
+  // Replace the underlying file while keeping the same document entry.
+  app.put("/api/documents/:id/file", { preHandler: authenticate }, async (request, reply) => {
+    const user = request.user as AuthUser;
+    const { id } = request.params as { id: string };
+
+    const doc = await DocumentModel.findOne({ _id: id, user: user.id });
+    if (!doc) {
+      return reply.code(404).send({ error: "Document not found." });
+    }
+
+    const parts = request.parts();
+    let fileBuffer: Buffer | null = null;
+    let originalFileName = "";
+    let newName = "";
+
+    for await (const part of parts) {
+      if (part.type === "file") {
+        fileBuffer = await part.toBuffer();
+        originalFileName = part.filename;
+      } else if (part.fieldname === "name") {
+        newName = String(part.value || "").trim();
+      }
+    }
+
+    if (!fileBuffer) {
+      return reply.code(400).send({ error: "No replacement file was uploaded." });
+    }
+
+    const result = await uploadBufferToCloudinary(fileBuffer, `docvault/${user.id}`);
+    const oldPublicId = doc.publicId;
+    const oldResourceType = doc.resourceType;
+
+    doc.originalFileName = originalFileName;
+    doc.fileUrl = result.secure_url;
+    doc.publicId = result.public_id;
+    doc.resourceType = result.resource_type;
+    doc.format = result.format;
+    doc.bytes = result.bytes;
+    if (newName) doc.name = newName;
+    await doc.save();
+
+    await deleteFromCloudinary(oldPublicId, oldResourceType).catch(() => {});
+
+    return reply.send({ document: serializeDocument(doc) });
+  });
+
+  app.get<{ Params: { id: string } }>(
+    "/api/documents/:id/download",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const doc = await DocumentModel.findOne({ _id: request.params.id, user: user.id });
+      if (!doc) {
+        return reply.code(404).send({ error: "Document not found." });
+      }
+      const downloadUrl = buildDownloadUrl(doc.publicId, doc.resourceType, doc.originalFileName);
+      return reply.send({ downloadUrl });
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/api/documents/:id",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const doc = await DocumentModel.findOne({ _id: request.params.id, user: user.id });
+      if (!doc) {
+        return reply.code(404).send({ error: "Document not found." });
+      }
+      await deleteFromCloudinary(doc.publicId, doc.resourceType);
+      await doc.deleteOne();
+      return reply.send({ success: true });
+    }
+  );
+}
