@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -18,6 +18,7 @@ import DocumentCard from "../components/DocumentCard";
 import CredentialCard from "../components/CredentialCard";
 import CredentialForm from "../components/CredentialForm";
 import PreviewModal from "../components/PreviewModal";
+import { GridSkeleton } from "../components/SkeletonLoaders";
 import { getAvatarColor } from "../utils/avatarColor";
 import EmptyFolderIllustration from "../../public/assets/png/emtpy-folder-svg.png";
 
@@ -29,8 +30,15 @@ export default function Dashboard() {
 
   // Workspaces & Sidebar State
   const [workspaces, setWorkspaces] = useState([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspacesLoading, setWorkspacesLoading] = useState(true);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => {
+    return localStorage.getItem("activeWorkspaceId") ?? "";
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Profile Menu Dropdown State
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
 
   // Content Items
   const [documents, setDocuments] = useState([]);
@@ -65,19 +73,32 @@ export default function Dashboard() {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
   };
 
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [profileMenuOpen]);
+
   const loadWorkspaces = useCallback(async () => {
+    setWorkspacesLoading(true);
     try {
       const res = await fetchWorkspaces();
       const wsList = res.workspaces || [];
       setWorkspaces(wsList);
-
-      if (wsList.length > 0) {
-        setActiveWorkspaceId(wsList[0]._id || wsList[0].id);
-      } else {
-        setActiveWorkspaceId("");
-      }
     } catch (err) {
       console.error("Failed to fetch workspaces:", err);
+    } finally {
+      setWorkspacesLoading(false);
     }
   }, []);
 
@@ -153,6 +174,7 @@ export default function Dashboard() {
       const newWs = await createWorkspace({ name, icon });
       setWorkspaces((prev) => [...prev, newWs]);
       setActiveWorkspaceId(newWs._id);
+      localStorage.setItem("activeWorkspaceId", newWs._id);
     } catch (err) {
       setError(err.message || "Failed to create workspace.");
     }
@@ -175,7 +197,8 @@ export default function Dashboard() {
       setWorkspaces((prev) => {
         const remaining = prev.filter((w) => w._id !== id);
         if (activeWorkspaceId === id) {
-          setActiveWorkspaceId(remaining.length > 0 ? remaining[0]._id : "");
+          setActiveWorkspaceId("");
+          localStorage.setItem("activeWorkspaceId", "");
         }
         return remaining;
       });
@@ -214,13 +237,20 @@ export default function Dashboard() {
   const avatarStyle = getAvatarColor(userName);
   const hasSelection = selectedDocIds.length > 0;
 
+  const currentWorkspaceName =
+    activeWorkspaceId === ""
+      ? "All Workspaces"
+      : workspaces.find((w) => w._id === activeWorkspaceId)?.name || "Workspace";
+
   return (
     <div className="dashboard-layout">
       <Sidebar
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
+        isLoading={workspacesLoading}
         onSelect={(id) => {
           setActiveWorkspaceId(id);
+          localStorage.setItem("activeWorkspaceId", id);
           setCurrentPage(1);
           setIsSidebarOpen(false);
         }}
@@ -251,34 +281,71 @@ export default function Dashboard() {
           </div>
 
           <div className="topbar-right">
-            <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle Theme">
-              {theme === "light" ? "🌙" : "☀️"}
-            </button>
-
-            <div className="user-profile-badge">
-              <span
-                className="user-avatar"
-                style={{
-                  backgroundColor: avatarStyle.bg,
-                  color: avatarStyle.text,
-                  borderColor: avatarStyle.border,
-                }}
-              >
-                {firstLetter}
-              </span>
-              <span className="user-name-text">{userName}</span>
+            {/* Desktop Direct Action Controls */}
+            <div className="desktop-header-controls">
+              <button className="theme-toggle-btn" onClick={toggleTheme} title="Toggle Theme">
+                {theme === "light" ? "🌙" : "☀️"}
+              </button>
+              <button className="btn-logout" onClick={handleLogout} title="Log out">
+                Log out
+              </button>
             </div>
 
-            <button className="btn-logout" onClick={handleLogout} title="Log out">
-              Log out
-            </button>
+            {/* User Profile Badge (Clickable for mobile dropdown options) */}
+            <div className="user-profile-wrapper" ref={profileMenuRef}>
+              <div
+                className="user-profile-badge"
+                onClick={() => setProfileMenuOpen((prev) => !prev)}
+                role="button"
+                tabIndex={0}
+              >
+                <span
+                  className="user-avatar"
+                  style={{
+                    backgroundColor: avatarStyle.bg,
+                    color: avatarStyle.text,
+                    borderColor: avatarStyle.border,
+                  }}
+                >
+                  {firstLetter}
+                </span>
+                <span className="user-name-text">{userName}</span>
+              </div>
+
+              {/* Mobile Profile Dropdown Menu */}
+              {profileMenuOpen && (
+                <div className="profile-dropdown-menu">
+                  <div className="profile-dropdown-header">
+                    <p className="profile-dropdown-name">{userName}</p>
+                    <p className="profile-dropdown-email">{user?.email || ""}</p>
+                  </div>
+                  <div className="profile-dropdown-divider" />
+                  <button
+                    className="profile-dropdown-item"
+                    onClick={() => {
+                      toggleTheme();
+                      setProfileMenuOpen(false);
+                    }}
+                  >
+                    <span>{theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode"}</span>
+                  </button>
+                  <button
+                    className="profile-dropdown-item danger"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      handleLogout();
+                    }}
+                  >
+                    <span>🚪 Log out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
         <div className="dashboard-head">
-          <h1>
-            {workspaces.find((w) => w._id === activeWorkspaceId)?.name || "No Workspace Selected"}
-          </h1>
+          <h1>{currentWorkspaceName}</h1>
           <p>Retrieve stored documents and AES-256 encrypted credentials securely.</p>
         </div>
 
@@ -331,7 +398,6 @@ export default function Dashboard() {
           <span className="doc-count">{totalCount} item(s)</span>
         </div>
 
-        {/* Bulk Action Controls appear when at least one document is selected */}
         {hasSelection && (
           <div className="bulk-selection-bar">
             <label className="select-all-label">
@@ -354,7 +420,7 @@ export default function Dashboard() {
         {error && <div className="error-banner">{error}</div>}
 
         {loading ? (
-          <p className="empty-state">Loading workspace items...</p>
+          <GridSkeleton count={8} />
         ) : documents.length === 0 && credentials.length === 0 ? (
           <div className="empty-state">
             <img src={EmptyFolderIllustration} alt="No entries found" className="no-image-found-illustration" />

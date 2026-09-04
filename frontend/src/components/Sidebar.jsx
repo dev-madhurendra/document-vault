@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 const ICON_CHOICES = ["📁", "📄", "🧾", "🎓", "🔐", "💼", "🏠", "🚗", "🏥", "🎯"];
 
 export default function Sidebar({
@@ -55,8 +56,29 @@ export default function Sidebar({
         </div>
 
         <nav className="sidebar-list">
+          {/* Permanent "All Items" Workspace Option */}
+          <div className={`sidebar-item ${activeWorkspaceId === "" ? "active" : ""}`}>
+            <button
+              className="sidebar-item-btn"
+              onClick={() => {
+                onSelect("");
+                localStorage.setItem("activeWorkspaceId", "");
+                onClose();
+              }}
+            >
+              <span className="sidebar-item-icon">🗂️</span>
+              <span className="sidebar-item-name">All Workspaces</span>
+            </button>
+          </div>
+
+          <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "8px 0" }} />
+
+          {/* Dynamic User Workspaces */}
           {workspaces.map((ws, index) => (
-            <div key={ws._id || ws.id || `ws-${index}`} className={`sidebar-item ${activeWorkspaceId === ws._id ? "active" : ""}`}>
+            <div
+              key={ws._id || ws.id || `ws-${index}`}
+              className={`sidebar-item ${activeWorkspaceId === ws._id ? "active" : ""}`}
+            >
               {editingId === ws._id ? (
                 <form className="sidebar-edit-form" onSubmit={(e) => submitEdit(e, ws)}>
                   <input
@@ -72,12 +94,15 @@ export default function Sidebar({
                     className="sidebar-item-btn"
                     onClick={() => {
                       onSelect(ws._id);
+                      localStorage.setItem("activeWorkspaceId", ws._id);
                       onClose();
                     }}
                   >
-                    <span className="sidebar-item-icon">{ws.icon}</span>
+                    <span className="sidebar-item-icon">{ws.icon || "📁"}</span>
                     <span className="sidebar-item-name">{ws.name}</span>
-                    <span className="sidebar-item-count">{ws.itemCount}</span>
+                    {ws.itemCount !== undefined && (
+                      <span className="sidebar-item-count">{ws.itemCount}</span>
+                    )}
                   </button>
 
                   {!ws.isDefault && (
@@ -138,7 +163,11 @@ export default function Sidebar({
                 onChange={(e) => setNewName(e.target.value)}
               />
               <div className="sidebar-create-actions">
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setIsCreating(false)}>
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={() => setIsCreating(false)}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-sm">
