@@ -2030,3 +2030,49 @@ textarea {
     align-items: stretch;
   }
 }
+
+/* =========================================================
+   DOCUMENT & CREDENTIAL CARD MENU TRIGGER
+   ========================================================= */
+
+.doc-menu-trigger {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-light);
+  background: var(--bg-surface);
+  color: var(--text-main); /* Dynamically changes color based on theme */
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+}
+
+.doc-menu-trigger:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-hover);
+  color: var(--primary);
+  transform: scale(1.05);
+}
+
+.doc-menu-trigger svg {
+  fill: currentColor; /* Ensures SVG icon matches button text color */
+  width: 16px;
+  height: 16px;
+}
+
+/* Specific Dark Mode overrides */
+[data-theme="dark"] .doc-menu-trigger {
+  background: var(--bg-subtle);
+  border-color: var(--border-hover);
+  color: var(--text-main); /* White/light slate in dark mode */
+}
+
+[data-theme="dark"] .doc-menu-trigger:hover {
+  background: var(--bg-surface);
+  color: var(--primary);
+  border-color: var(--primary);
+}
