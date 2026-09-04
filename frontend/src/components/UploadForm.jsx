@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { uploadDocument } from "../api";
 
-export default function UploadForm({ onUploaded }) {
+export default function UploadForm({ workspaceId, onUploaded }) {
   const [name, setName] = useState("");
   const [file, setFile] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -20,6 +20,7 @@ export default function UploadForm({ onUploaded }) {
   const onSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
     if (!file) {
       setError("Choose a file to upload.");
       return;
@@ -28,9 +29,18 @@ export default function UploadForm({ onUploaded }) {
       setError("Give the document a name so you can search for it later.");
       return;
     }
+
+    // Resolve active workspace ID from prop or localStorage as string
+    const targetWorkspaceId = workspaceId || localStorage.getItem("activeWorkspaceId") || "";
+
     setProgress(0);
     try {
-      const data = await uploadDocument(file, name.trim(), setProgress);
+      const data = await uploadDocument(
+        file,
+        name.trim(),
+        targetWorkspaceId,
+        setProgress
+      );
       onUploaded(data.document);
       setName("");
       setFile(null);
@@ -65,7 +75,7 @@ export default function UploadForm({ onUploaded }) {
               id="doc-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Aadhaar card, Rent agreement 2026"
+              placeholder="e.g. Identity Document, Rent agreement 2026"
             />
           </div>
           <button className="btn" type="submit" disabled={progress !== null}>

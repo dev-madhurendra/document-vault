@@ -56,7 +56,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right Form Area (No Card Shadow) */}
+      {/* Right Form Area */}
       <div className="auth-form-wrapper">
         <div className="auth-form-content">
           <div className="form-header">

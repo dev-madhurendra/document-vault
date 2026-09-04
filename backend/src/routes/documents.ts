@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { DocumentModel, IDocument } from "../models/Document";
+import { WorkspaceModel } from "../models/Workspace";
 import { authenticate } from "../middleware/auth";
 import {
   uploadBufferToCloudinary,
@@ -14,8 +15,6 @@ interface AuthUser {
   email: string;
 }
 
-// Images and PDFs can be shown inline in the browser; everything else
-// (docx, xlsx, zip, etc.) has to be downloaded to be opened.
 const INLINE_VIEWABLE_FORMATS = new Set([
   "jpg", "jpeg", "png", "gif", "webp", "svg", "pdf", "bmp", "tiff",
 ]);
@@ -25,6 +24,7 @@ function serializeDocument(doc: IDocument) {
   const viewable = doc.resourceType === "image" && INLINE_VIEWABLE_FORMATS.has(format);
   return {
     _id: doc._id,
+    workspaceId: doc.workspace,
     name: doc.name,
     originalFileName: doc.originalFileName,
     format: doc.format,
@@ -37,6 +37,7 @@ function serializeDocument(doc: IDocument) {
 }
 
 export async function documentRoutes(app: FastifyInstance) {
+  // 1. Upload Document
   app.post("/api/documents/upload", { preHandler: authenticate }, async (request, reply) => {
     const user = request.user as AuthUser;
     const parts = request.parts();
@@ -44,6 +45,7 @@ export async function documentRoutes(app: FastifyInstance) {
     let fileBuffer: Buffer | null = null;
     let originalFileName = "";
     let documentName = "";
+    let workspaceId = "";
 
     for await (const part of parts) {
       if (part.type === "file") {
@@ -51,12 +53,23 @@ export async function documentRoutes(app: FastifyInstance) {
         originalFileName = part.filename;
       } else if (part.fieldname === "name") {
         documentName = String(part.value || "").trim();
+      } else if (part.fieldname === "workspaceId") {
+        workspaceId = String(part.value || "").trim();
       }
     }
 
     if (!fileBuffer) {
       return reply.code(400).send({ error: "No file was uploaded." });
     }
+    if (!workspaceId) {
+      return reply.code(400).send({ error: "workspaceId is required." });
+    }
+
+    const workspace = await WorkspaceModel.findOne({ _id: workspaceId, user: user.id });
+    if (!workspace) {
+      return reply.code(404).send({ error: "Workspace not found." });
+    }
+
     if (!documentName) {
       documentName = originalFileName;
     }
@@ -65,6 +78,7 @@ export async function documentRoutes(app: FastifyInstance) {
 
     const doc = await DocumentModel.create({
       user: user.id,
+      workspace: workspaceId,
       name: documentName,
       originalFileName,
       fileUrl: result.secure_url,
@@ -77,24 +91,71 @@ export async function documentRoutes(app: FastifyInstance) {
     return reply.code(201).send({ document: serializeDocument(doc) });
   });
 
-  app.get<{ Querystring: { search?: string } }>(
+  // 2. Fetch Documents (Paginated)
+  app.get<{ Querystring: { search?: string; workspaceId?: string; page?: string; limit?: string } }>(
     "/api/documents",
     { preHandler: authenticate },
     async (request, reply) => {
       const user = request.user as AuthUser;
-      const { search } = request.query;
+      const { search, workspaceId } = request.query;
+      const page = Math.max(1, parseInt(request.query.page || "1", 10) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(request.query.limit || "8", 10) || 8));
 
       const query: Record<string, unknown> = { user: user.id };
+      if (workspaceId && workspaceId !== "all") query.workspace = workspaceId;
       if (search && search.trim()) {
         query.name = { $regex: search.trim(), $options: "i" };
       }
 
-      const documents = await DocumentModel.find(query).sort({ createdAt: -1 });
-      return reply.send({ documents: documents.map(serializeDocument) });
+      const [total, documents] = await Promise.all([
+        DocumentModel.countDocuments(query),
+        DocumentModel.find(query)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit),
+      ]);
+
+      return reply.send({
+        documents: documents.map(serializeDocument),
+        total,
+        pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      });
     }
   );
 
-  // Rename a document (just the searchable label, not the underlying file).
+  // 3. Move Multiple Documents (Bulk or Single Move Endpoint)
+  app.patch<{ Body: { documentIds?: string[]; targetWorkspaceId?: string } }>(
+    "/api/documents/move",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const { documentIds, targetWorkspaceId } = request.body || {};
+
+      if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+        return reply.code(400).send({ error: "No document IDs provided." });
+      }
+
+      if (!targetWorkspaceId) {
+        return reply.code(400).send({ error: "Target workspace ID is required." });
+      }
+
+      // Verify workspace ownership
+      const workspace = await WorkspaceModel.findOne({ _id: targetWorkspaceId, user: user.id });
+      if (!workspace) {
+        return reply.code(404).send({ error: "Target workspace not found." });
+      }
+
+      // Perform bulk update on Mongoose schema property ('workspace')
+      await DocumentModel.updateMany(
+        { _id: { $in: documentIds }, user: user.id },
+        { $set: { workspace: targetWorkspaceId } }
+      );
+
+      return reply.send({ message: "Documents moved successfully." });
+    }
+  );
+
+  // 4. Rename Document
   app.patch<{ Params: { id: string }; Body: { name?: string } }>(
     "/api/documents/:id",
     { preHandler: authenticate },
@@ -116,7 +177,31 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   );
 
-  // Replace the underlying file while keeping the same document entry.
+  // 5. Move Single Document by URL ID
+  app.patch<{ Params: { id: string }; Body: { workspaceId?: string } }>(
+    "/api/documents/:id/move",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = request.user as AuthUser;
+      const { workspaceId } = request.body || {};
+      if (!workspaceId) {
+        return reply.code(400).send({ error: "workspaceId is required." });
+      }
+
+      const [doc, workspace] = await Promise.all([
+        DocumentModel.findOne({ _id: request.params.id, user: user.id }),
+        WorkspaceModel.findOne({ _id: workspaceId, user: user.id }),
+      ]);
+      if (!doc) return reply.code(404).send({ error: "Document not found." });
+      if (!workspace) return reply.code(404).send({ error: "Target workspace not found." });
+
+      doc.workspace = workspace._id;
+      await doc.save();
+      return reply.send({ document: serializeDocument(doc) });
+    }
+  );
+
+  // 6. Replace File
   app.put("/api/documents/:id/file", { preHandler: authenticate }, async (request, reply) => {
     const user = request.user as AuthUser;
     const { id } = request.params as { id: string };
@@ -162,6 +247,7 @@ export async function documentRoutes(app: FastifyInstance) {
     return reply.send({ document: serializeDocument(doc) });
   });
 
+  // 7. Get Download URL
   app.get<{ Params: { id: string } }>(
     "/api/documents/:id/download",
     { preHandler: authenticate },
@@ -176,6 +262,7 @@ export async function documentRoutes(app: FastifyInstance) {
     }
   );
 
+  // 8. Delete Document
   app.delete<{ Params: { id: string } }>(
     "/api/documents/:id",
     { preHandler: authenticate },
