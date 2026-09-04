@@ -40,15 +40,25 @@ export function deleteFromCloudinary(publicId: string, resourceType: string) {
   return cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 }
 
-export function buildDownloadUrl(publicId: string, resourceType: string, downloadName: string) {
+// Fix for generating direct download URLs
+export function buildDownloadUrl(
+  publicId: string,
+  resourceType: string,
+  downloadName: string,
+  format?: string
+) {
+  // Clean custom filename (remove special characters/spaces)
+  const safeFileName = downloadName.replace(/[^a-zA-Z0-9_-]/g, "_");
+
   return cloudinary.url(publicId, {
     resource_type: resourceType,
-    flags: `attachment:${encodeURIComponent(downloadName)}`,
+    flags: `attachment:${safeFileName}`, // Custom filename goes in the attachment flag
+    format: format,
     secure: true,
   });
 }
 
-// Generate direct inline preview URL for frontend rendering
+// Fix for generating view/preview URLs
 export function buildViewUrl(publicId: string, resourceType: string, format?: string) {
   return cloudinary.url(publicId, {
     resource_type: resourceType,
