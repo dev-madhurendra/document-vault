@@ -5,12 +5,11 @@
     "moduleResolution": "Node16",
     "outDir": "dist",
     "rootDir": "src",
+    "types": ["node"],
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "strict": true,
-    "declaration": false,
-    "sourceMap": false
+    "strict": true
   },
   "include": ["src/**/*.ts"]
 }

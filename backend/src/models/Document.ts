@@ -1,14 +1,15 @@
 import { Schema, model, Document as MongooseDocument, Types } from "mongoose";
 
 export interface IDocument extends MongooseDocument {
+  _id: Types.ObjectId;
   user: Types.ObjectId;
   name: string;
   originalFileName: string;
   fileUrl: string;
   publicId: string;
   resourceType: string;
-  format: string;
-  bytes: number;
+  format?: string;
+  bytes?: number;
   createdAt: Date;
 }
 

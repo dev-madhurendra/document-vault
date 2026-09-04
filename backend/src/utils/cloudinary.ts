@@ -1,4 +1,4 @@
-import { v2 as cloudinary } from "cloudinary";
+import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
 import streamifier from "streamifier";
 
 cloudinary.config({
@@ -27,9 +27,9 @@ export function uploadBufferToCloudinary(
         type: "upload",
         access_mode: "public", // Fixes 401 Unauthorized on newer Cloudinary accounts
       },
-      (error, result) => {
+      (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
         if (error || !result) return reject(error);
-        resolve(result as unknown as CloudinaryUploadResult);
+        resolve(result as CloudinaryUploadResult);
       }
     );
     streamifier.createReadStream(buffer).pipe(uploadStream);
