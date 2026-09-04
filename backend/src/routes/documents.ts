@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { DocumentModel, IDocument } from "../models/Document";
 import { WorkspaceModel } from "../models/Workspace";
+import { User as UserModel } from "../models/User";
 import { authenticate } from "../middleware/auth";
 import {
   uploadBufferToCloudinary,
@@ -37,9 +38,9 @@ function serializeDocument(doc: IDocument) {
 }
 
 export async function documentRoutes(app: FastifyInstance) {
-  // 1. Upload Document
+  // 1. Upload Document with Plan Verification
   app.post("/api/documents/upload", { preHandler: authenticate }, async (request, reply) => {
-    const user = request.user as AuthUser;
+    const authUser = request.user as AuthUser;
     const parts = request.parts();
 
     let fileBuffer: Buffer | null = null;
@@ -65,19 +66,39 @@ export async function documentRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "workspaceId is required." });
     }
 
-    const workspace = await WorkspaceModel.findOne({ _id: workspaceId, user: user.id });
+    const workspace = await WorkspaceModel.findOne({ _id: workspaceId, user: authUser.id });
     if (!workspace) {
       return reply.code(404).send({ error: "Workspace not found." });
+    }
+
+    // Check user plan limits
+    const userDoc = await UserModel.findById(authUser.id);
+    if (!userDoc) {
+      return reply.code(401).send({ error: "User not found." });
+    }
+
+    if (userDoc.plan === "basic") {
+      const existingDocCount = await DocumentModel.countDocuments({
+        user: authUser.id,
+        workspace: workspaceId,
+      });
+
+      if (existingDocCount >= 1) {
+        return reply.code(403).send({
+          error:
+            "You are currently on the Basic plan (limit: 1 document per workspace). Upgrade to Premium to unlock unlimited uploads and full vault feature access.",
+        });
+      }
     }
 
     if (!documentName) {
       documentName = originalFileName;
     }
 
-    const result = await uploadBufferToCloudinary(fileBuffer, `docvault/${user.id}`);
+    const result = await uploadBufferToCloudinary(fileBuffer, `docvault/${authUser.id}`);
 
     const doc = await DocumentModel.create({
-      user: user.id,
+      user: authUser.id,
       workspace: workspaceId,
       name: documentName,
       originalFileName,
@@ -139,13 +160,11 @@ export async function documentRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: "Target workspace ID is required." });
       }
 
-      // Verify workspace ownership
       const workspace = await WorkspaceModel.findOne({ _id: targetWorkspaceId, user: user.id });
       if (!workspace) {
         return reply.code(404).send({ error: "Target workspace not found." });
       }
 
-      // Perform bulk update on Mongoose schema property ('workspace')
       await DocumentModel.updateMany(
         { _id: { $in: documentIds }, user: user.id },
         { $set: { workspace: targetWorkspaceId } }

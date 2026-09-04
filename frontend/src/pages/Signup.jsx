@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function Signup() {
   const { loginWithToken } = useAuth();
   const navigate = useNavigate();
@@ -24,7 +26,7 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/signup", {
+      const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -49,7 +51,7 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/verify-otp", {
+      const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.email, otp }),
@@ -78,7 +80,7 @@ export default function Signup() {
     setResending(true);
 
     try {
-      const res = await fetch("/api/auth/resend-otp", {
+      const res = await fetch(`${API_URL}/api/auth/resend-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.email }),

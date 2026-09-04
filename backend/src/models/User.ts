@@ -6,9 +6,11 @@ export interface IUser extends MongooseDocument {
   email: string;
   passwordHash: string;
   isVerified: boolean;
+  plan: "basic" | "premium"
   otp?: string;
   otpExpiresAt?: Date;
   createdAt: Date;
+  
 }
 
 const userSchema = new Schema<IUser>({
@@ -16,6 +18,7 @@ const userSchema = new Schema<IUser>({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
+  plan: { type: String, enum: ["basic", "premium"], default: "basic" },
   otp: { type: String, default: undefined },
   otpExpiresAt: { type: Date, default: undefined },
   createdAt: { type: Date, default: Date.now },

@@ -11,7 +11,8 @@ export default function Sidebar({
   onDelete,
   isOpen,
   onClose,
-  isLoading = false, // 👈 1. Accept isLoading prop
+  isLoading = false,
+  userPlan = "basic"
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -19,6 +20,7 @@ export default function Sidebar({
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
+  const isBasic = userPlan === "basic";
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -147,45 +149,54 @@ export default function Sidebar({
         </nav>
 
         <div className="sidebar-footer">
-          {!isCreating ? (
-            <button className="sidebar-add-btn" onClick={() => setIsCreating(true)}>
-              + New workspace
+          {isBasic ? (
+            <button
+              className="sidebar-add-btn disabled-basic"
+              onClick={() => alert("Workspace creation requires a Premium Subscription.")}
+              title="Upgrade to Premium to add custom workspaces"
+            >
+              🔒 + New workspace (Premium)
             </button>
-          ) : (
-            <form className="sidebar-create-form" onSubmit={handleCreate}>
-              <div className="icon-picker">
-                {ICON_CHOICES.map((icon) => (
+          ) :
+            !isCreating ? (
+              <button className="sidebar-add-btn" onClick={() => setIsCreating(true)}>
+                + New workspace
+              </button>
+            ) : (
+              <form className="sidebar-create-form" onSubmit={handleCreate}>
+                <div className="icon-picker">
+                  {ICON_CHOICES.map((icon) => (
+                    <button
+                      type="button"
+                      key={icon}
+                      className={`icon-choice ${newIcon === icon ? "selected" : ""}`}
+                      onClick={() => setNewIcon(icon)}
+                    >
+                      {icon}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Workspace name…"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+                <div className="sidebar-create-actions">
                   <button
                     type="button"
-                    key={icon}
-                    className={`icon-choice ${newIcon === icon ? "selected" : ""}`}
-                    onClick={() => setNewIcon(icon)}
+                    className="btn-ghost btn-sm"
+                    onClick={() => setIsCreating(false)}
                   >
-                    {icon}
+                    Cancel
                   </button>
-                ))}
-              </div>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Workspace name…"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-              <div className="sidebar-create-actions">
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm"
-                  onClick={() => setIsCreating(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-sm">
-                  Create
-                </button>
-              </div>
-            </form>
-          )}
+                  <button type="submit" className="btn btn-sm">
+                    Create
+                  </button>
+                </div>
+              </form>
+            )}
         </div>
       </aside>
     </>
