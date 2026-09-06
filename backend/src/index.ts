@@ -8,6 +8,7 @@ import { authRoutes } from "./routes/auth";
 import { documentRoutes } from "./routes/documents";
 import { workspaceRoutes } from "./routes/workspaces";
 import { credentialRoutes } from "./routes/credentials";
+import { shareLinkRoutes } from "./routes/shareLinkRoutes";
 
 const app = Fastify({ logger: true });
 
@@ -49,6 +50,7 @@ async function start() {
   await app.register(workspaceRoutes);
   await app.register(documentRoutes);
   await app.register(credentialRoutes);
+  await app.register(shareLinkRoutes);
 
   const mongoUri = process.env.MONGO_URI;
   if (!mongoUri) {

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
+import ShareModal from "./ShareModal";
+import { compressDocument } from "../api";
 import { deleteDocument, renameDocument, replaceDocumentFile, getDownloadUrl } from "../api";
 
 function formatBytes(bytes) {
@@ -22,15 +24,15 @@ function formatDate(dateString) {
     });
 }
 
-export default function DocumentCard({ 
-    document, 
-    onView, 
-    onChanged, 
-    onDeleted, 
-    onMoveSingle, 
-    isSelected, 
+export default function DocumentCard({
+    document,
+    onView,
+    onChanged,
+    onDeleted,
+    onMoveSingle,
+    isSelected,
     hasSelection,
-    onToggleSelect 
+    onToggleSelect
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -39,6 +41,14 @@ export default function DocumentCard({
     const [replaceProgress, setReplaceProgress] = useState(null);
     const menuRef = useRef(null);
     const replaceInputRef = useRef(null);
+
+    const [shareOpen, setShareOpen] = useState(false);
+    // const [compressing, setCompressing] = useState(false);
+    // const [compressOpen, setCompressOpen] = useState(false);
+
+    const extension = (document.format || document.originalFileName?.split(".").pop() || "file").slice(0, 4);
+    const isCompressible = ["pdf", "jpg", "jpeg"].includes(extension.toLowerCase());
+
 
     useEffect(() => {
         if (!menuOpen) return;
@@ -49,7 +59,23 @@ export default function DocumentCard({
         return () => window.document.removeEventListener("mousedown", onClickOutside);
     }, [menuOpen]);
 
-    const extension = (document.format || document.originalFileName?.split(".").pop() || "file").slice(0, 4);
+
+    const handleCompress = async () => {
+        setCompressing(true);
+        try {
+            const { document: updated, savedBytes } = await compressDocument(document._id, { quality: "medium" });
+            onChanged(updated);
+            if (savedBytes > 0) {
+                alert(`Compressed — saved ${formatBytes(savedBytes)}.`);
+            } else {
+                alert("File was already well optimized; no meaningful reduction.");
+            }
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setCompressing(false);
+        }
+    };
 
     const handleRenameSubmit = async (e) => {
         e.preventDefault();
@@ -229,6 +255,14 @@ export default function DocumentCard({
                         <button onClick={() => { handlePdfDownload(); setMenuOpen(false); }}>
                             Download as PDF
                         </button>
+                        <button onClick={() => { setShareOpen(true); setMenuOpen(false); }}>
+                            🔗 Share
+                        </button>
+                        {/* {isCompressible && (
+                            <button onClick={() => { handleCompress(); setMenuOpen(false); }} disabled={compressing}>
+                                {compressing ? "Compressing…" : "🗜️ Compress"}
+                            </button>
+                        )} */}
                         <button className="doc-menu-danger" onClick={() => { handleDelete(); setMenuOpen(false); }}>
                             Delete
                         </button>
@@ -241,6 +275,7 @@ export default function DocumentCard({
                     onChange={handleReplaceFile}
                 />
             </div>
+            {shareOpen && <ShareModal document={document} onClose={() => setShareOpen(false)} />}
         </div>
     );
 }

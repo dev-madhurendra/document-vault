@@ -233,3 +233,36 @@ export async function moveDocuments(documentIds, targetWorkspaceId) {
   });
   return handleResponse(res);
 }
+
+export async function createShareLink(documentId, { expiresIn, permission }) {
+  const res = await fetch(`${API_URL}/api/documents/${documentId}/share-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ expiresIn, permission }),
+  });
+  return handleResponse(res);
+}
+
+export async function getShareLinks(documentId) {
+  const res = await fetch(`${API_URL}/api/documents/${documentId}/share-links`, {
+    headers: { ...authHeaders() },
+  });
+  return handleResponse(res);
+}
+
+export async function revokeShareLink(linkId) {
+  const res = await fetch(`${API_URL}/api/share-links/${linkId}`, {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  return handleResponse(res);
+}
+
+export async function compressDocument(documentId, { quality = "medium" } = {}) {
+  const res = await fetch(`${API_URL}/api/documents/${documentId}/compress`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ quality }),
+  });
+  return handleResponse(res);
+}
